@@ -1,0 +1,8 @@
+{
+    "distance_fade": {"r":5,"g":5, "b": 5},
+    "keep_details": false,
+    "invulnerability_range_high": {"r":5,"g":5, "b": 5},
+    "invulnerability_range_low": {"r":5,"g":5, "b": 5},
+    "radiation_suit": {"r":5,"g":5, "b": 5},
+    "item_pickup": {"r":5,"g":5, "b": 5}
+}
