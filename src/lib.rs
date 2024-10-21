@@ -4,20 +4,11 @@ use serde_json;
 use std::error::Error;
 use std::fmt::Display;
 use image::{self, ImageBuffer};
-
+use palette::{color_difference::EuclideanDistance, FromColor, IntoColor, Lab, Srgb, Hsv};
 
 #[derive(Deserialize)]
 pub struct Color {
-    r: u8,
-    g: u8,
-    b: u8
-}
-
-
-impl Display for Color {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "(r:{}, g:{}, b:{})", self.r, self.g, self.b)
-    }
+    r: u8, g: u8, b: u8
 }
 
 
@@ -29,6 +20,40 @@ pub struct Config {
     invulnerability_range_low: Color,
     radiation_suit: Color,
     item_pickup: Color,
+}
+
+
+struct ColorIterator<'a> {
+    bytes: &'a [u8],
+    offset: usize
+}
+
+
+impl<'a> Iterator for ColorIterator<'a> {
+    type Item = Srgb;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.offset < self.bytes.len() - 2 {
+            let color = Srgb::new(
+                self.bytes[self.offset] as f32,
+                self.bytes[self.offset + 1] as f32,
+                self.bytes[self.offset + 2] as f32,
+            );
+
+            self.offset += 3;
+
+            Some(color)
+        } else {
+            None
+        }
+    }
+}
+
+
+impl Display for Color {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "(r:{}, g:{}, b:{})", self.r, self.g, self.b)
+    }
 }
 
 pub struct Input {
@@ -44,12 +69,15 @@ pub fn config_from_input(input: Input) -> Result<Config, Box<dyn Error>> {
 }
 
 
-pub fn input_from_args(args: &Vec<String>) -> Result<Input, &'static str> {
-    if args.len() < 2 {
-        return Err("Please provide a file.")
-    }
+pub fn build_input(
+    mut args: impl Iterator<Item = String>
+) -> Result<Input, &'static str> {
+    args.next();
 
-    let file_path = args[1].clone();
+    let file_path = match args.next() {
+        Some(arg) => arg,
+        None => return Err("Must specify file path.")
+    };
 
     Ok(
         Input { file_path }
@@ -66,6 +94,25 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+pub fn get_color_distance(c1: Srgb, c2: Srgb) -> f32 {
+    let lab1 = Lab::from_color(c1);
+    let lab2 = Lab::from_color(c2);
+
+    lab1.distance(lab2)
+}
+
+
+pub fn best_fit_pixel_offset(
+    colormap: &Vec<u8>, color: Srgb
+) -> usize {
+    3 * (ColorIterator {bytes: colormap, offset: 0})
+        .map(|cmp_color| get_color_distance(color.clone(), cmp_color.clone()))
+        .enumerate()
+        .max_by(|(_, a), (_, b)| a.partial_cmp(b).expect("Result cannot be NaN.") )
+        .map(|(index, _)| index).expect("Invalid input indeces.")
+}
+
+
 
 pub fn get_playpal_buffer() -> Result<Vec<u8>, Box<dyn Error>> {
     let bytes = fs::read("src/assets/PLAYPAL.pal")?;
@@ -77,6 +124,27 @@ pub fn get_playpal_buffer() -> Result<Vec<u8>, Box<dyn Error>> {
     }
 
     Ok(bytes)
+}
+
+
+pub fn map_at_distance(
+    colormap: &Vec<u8>, fade_color: Srgb, distance: u8, keep_details: bool
+) -> Vec<u8> {
+    let mix = (distance as f32)/255.0;
+
+    (ColorIterator {bytes: colormap, offset: 0})
+        .map(|cmp_color| {
+            let real_fade_color = match keep_details {
+                false => fade_color.clone(),
+                true => {
+                    let mut fade_hsv = Hsv::from_color(fade_color);
+                    let cmp_hsv = Hsv::from_color(cmp_color);
+                    fade_hsv.value = cmp_hsv.value;
+
+                    Hsv::into_color(fade_hsv)
+                }
+            }
+        })
 }
 
 

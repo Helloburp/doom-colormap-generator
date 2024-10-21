@@ -4,8 +4,7 @@ use std::process;
 use doom_colormap_generator as colorgen;
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    let input = colorgen::input_from_args(&args)
+    let input = colorgen::build_input(env::args())
         .unwrap_or_else(|err| {
             eprintln!("Invalid arguments: {}", err);
             process::exit(1);
