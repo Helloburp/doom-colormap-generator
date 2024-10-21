@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-clap = "4.5.20"
+clap = { version = "4.5.20", features = ["derive"] }
 image = "0.25.4"
 palette = { version = "0.7.6", features = ["serializing"]}
 serde = { version = "1.0.210", features = ["derive"] }

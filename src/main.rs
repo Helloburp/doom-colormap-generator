@@ -1,22 +1,18 @@
-use std::env;
 use std::process;
+use clap::Parser;
 
 use doom_colormap_generator as colorgen;
 
 fn main() {
-    let input = colorgen::build_input(env::args())
-        .unwrap_or_else(|err| {
-            eprintln!("Invalid arguments: {}", err);
-            process::exit(1);
-        });
+    let input = colorgen::Input::parse();
     
-    let config = colorgen::config_from_input(input)
+    let config = colorgen::config_from_input(&input)
         .unwrap_or_else(|err| {
             eprintln!("Error retrieving config: {}", err);
             process::exit(1);
         });
     
-    if let Err(err) = colorgen::run(config) {
+    if let Err(err) = colorgen::run(input, config) {
         eprintln!("Application error: {}", err);
         process::exit(1);
     }

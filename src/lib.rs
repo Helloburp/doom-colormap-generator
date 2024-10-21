@@ -1,13 +1,21 @@
-use std::fs; use serde::Deserialize;
+use std::{fs, path::PathBuf}; use serde::Deserialize;
 use serde_json;
 use std::error::Error;
-use std::fmt::Display;
 use image::{self, ImageBuffer};
+use clap::Parser;
 use palette::{
-    FromColor, Hsv,
-    IntoColor, Lab, Mix,
-    color_difference::EuclideanDistance,
+    color_difference::EuclideanDistance, FromColor, Hsv, IntoColor, Lab, Mix
 };
+
+#[derive(Parser, Debug)]
+pub struct Input {
+    #[arg(short, long)]
+    config: PathBuf,
+
+    #[arg(short, long)]
+    output: PathBuf,
+}
+
 
 #[derive(Deserialize)]
 pub struct MaskConfig {
@@ -18,7 +26,7 @@ pub struct MaskConfig {
 
 
 #[derive(Deserialize)]
-pub struct Config {
+pub struct UserConfig {
     distance_fade: palette::Srgb<u8>,
     masking: MaskConfig,
     // invulnerability_range_high: palette::Srgb<u8>,
@@ -50,58 +58,66 @@ impl<'a> Iterator for ColorIterator<'a> {
 }
 
 
-pub struct Input {
-    file_path: String,
-}
-
-
-pub fn config_from_input(input: Input) -> Result<Config, Box<dyn Error>> {
-    let contents = fs::read_to_string(input.file_path)?;
-    let config: Config = serde_json::from_str(&contents)?;
+pub fn config_from_input(input: &Input) -> Result<UserConfig, Box<dyn Error>> {
+    let contents = fs::read_to_string(&input.config)?;
+    let config: UserConfig = serde_json::from_str(&contents)?;
 
     Ok(config)
 }
 
 
-pub fn build_input(
-    mut args: impl Iterator<Item = String>
-) -> Result<Input, &'static str> {
-    args.next();
-
-    let file_path = match args.next() {
-        Some(arg) => arg,
-        None => return Err("Must specify file path.")
-    };
-
-    Ok(
-        Input { file_path }
-    )
-}
-
-
-pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
-    println!(
-        "Distance fade: {}",
-        serde_json::to_string(&config.distance_fade)?
-    );
+pub fn run(input: Input, config: UserConfig) -> Result<(), Box<dyn Error>> {
     let playpal_bytes = fs::read("src/assets/PLAYPAL.pal")?;
     let colormap_bytes = fs::read("src/assets/COLORMAP.cmp")?;
 
-    let playpal_image = draw_playpal(&playpal_bytes)?;
-    let color_image = draw_colormap(&playpal_bytes, &colormap_bytes, 0)?;
+    let new_colormap_bytes = build_colormap(
+        &playpal_bytes,
+        &get_invulnerability_page_from_colormap(&colormap_bytes),
+        &config
+    );
 
-    playpal_image.save("PLAYPAL.png")?;
-    color_image.save("COLORMAP.png")?;
+    let new_playpal_bytes = playpal_bytes.clone();
 
-    let dark_colormap_image = draw_colormap(
-        &playpal_bytes, &build_colormap(
-            &playpal_bytes,
-            &get_invulnerability_page_from_colormap(&colormap_bytes),
-            &config
-        ), 0
+    let new_playpal_image = draw_playpal(
+        &playpal_bytes
     )?;
 
-    dark_colormap_image.save("DARK_COLORMAP.png")?;
+    let new_colormap_image = draw_colormap(
+        &playpal_bytes, &new_colormap_bytes, 0
+    )?;
+
+    
+    if !fs::exists(&input.output).unwrap_or_default() {
+        fs::create_dir(&input.output)?;
+    }
+
+    fs::write({
+        let mut path = input.output.clone();
+        path.push("PLAYPAL");
+        path.set_extension("pal");
+        path
+    }, new_playpal_bytes)?;
+
+    fs::write({
+        let mut path = input.output.clone();
+        path.push("COLORMAP");
+        path.set_extension("cmp");
+        path
+    }, new_colormap_bytes)?;
+
+    new_playpal_image.save({
+        let mut path = input.output.clone();
+        path.push("PLAYPAL_preview");
+        path.set_extension("png");
+        path
+    })?;
+
+    new_colormap_image.save({
+        let mut path = input.output.clone();
+        path.push("COLORMAP_preview");
+        path.set_extension("png");
+        path
+    })?;
 
     Ok(())
 }
@@ -115,7 +131,7 @@ pub fn get_invulnerability_page_from_colormap<'a>(
 
 
 pub fn build_colormap(
-    playpal: &[u8], invulnerability_colormap_page: &[u8], config: &Config
+    playpal: &[u8], invulnerability_colormap_page: &[u8], config: &UserConfig
 ) -> Vec<u8> {
     let mut colormap = vec![];
     let playpal_first_page = &playpal[0..256*3];
