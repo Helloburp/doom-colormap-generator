@@ -57,6 +57,9 @@ impl<'a> Iterator for ColorIterator<'a> {
     }
 }
 
+static PLAYPAL_BYTES: &'static [u8] = include_bytes!("assets/PLAYPAL.pal");
+static COLORMAP_BYTES: &'static [u8] = include_bytes!("assets/COLORMAP.cmp");
+
 
 pub fn config_from_input(input: &Input) -> Result<UserConfig, Box<dyn Error>> {
     let contents = fs::read_to_string(&input.config)?;
@@ -67,23 +70,21 @@ pub fn config_from_input(input: &Input) -> Result<UserConfig, Box<dyn Error>> {
 
 
 pub fn run(input: Input, config: UserConfig) -> Result<(), Box<dyn Error>> {
-    let playpal_bytes = fs::read("src/assets/PLAYPAL.pal")?;
-    let colormap_bytes = fs::read("src/assets/COLORMAP.cmp")?;
 
     let new_colormap_bytes = build_colormap(
-        &playpal_bytes,
-        &get_invulnerability_page_from_colormap(&colormap_bytes),
+        PLAYPAL_BYTES,
+        &get_invulnerability_page_from_colormap(&COLORMAP_BYTES),
         &config
     );
 
-    let new_playpal_bytes = playpal_bytes.clone();
+    let new_playpal_bytes = PLAYPAL_BYTES;
 
     let new_playpal_image = draw_playpal(
-        &playpal_bytes
+        PLAYPAL_BYTES
     )?;
 
     let new_colormap_image = draw_colormap(
-        &playpal_bytes, &new_colormap_bytes, 0
+        PLAYPAL_BYTES, &new_colormap_bytes, 0
     )?;
 
     
