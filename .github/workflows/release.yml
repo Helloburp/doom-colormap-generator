@@ -35,7 +35,7 @@ jobs:
     name: Build (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     env:
-      BIN: doom-colormap-tool
+      BIN: doom-colormap-generator
     steps:
       - uses: actions/checkout@v4
         with:
