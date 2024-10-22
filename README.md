@@ -1,6 +1,6 @@
 # Doom Colormap Generator
 
-Usage: `doom-colormap-generator --input [path_to_input].json --output [path_to_output_dir]`
+Usage: `doom-colormap-generator --config [path_to_input].json --output [path_to_output_dir]`
 
 ## Valid Input Format
 
