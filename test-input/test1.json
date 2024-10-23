@@ -1,8 +1,8 @@
 {
     "distance_fade": {"red":50, "green":0, "blue": 0},
-    "hurt": {"red":0, "green":255, "blue": 0},
     "radiation_suit": {"red":0, "green":0, "blue": 255},
     "item_pickup": {"red":255, "green":0, "blue": 255},
+    "hurt": {"red":0, "green":255, "blue": 0},
     "masking": {
         "keep_hue": false,
         "keep_saturation": false,
