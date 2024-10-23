@@ -38,8 +38,9 @@ pub struct UserConfig {
     masking: MaskConfig,
     // invulnerability_range_high: palette::Srgb<u8>,
     // invulnerability_range_low: palette::Srgb<u8>,
-    // radiation_suit: palette::Srgb<u8>,
-    // item_pickup: palette::Srgb<u8>,
+    hurt: palette::Srgb<u8>,
+    radiation_suit: palette::Srgb<u8>,
+    item_pickup: palette::Srgb<u8>,
 }
 
 pub fn config_from_input(input: &Input) -> Result<UserConfig, Box<dyn Error>> {
@@ -49,26 +50,29 @@ pub fn config_from_input(input: &Input) -> Result<UserConfig, Box<dyn Error>> {
     Ok(config)
 }
 
-fn new_colormap(playpal_page_0: &[u8]) -> Vec<u8> {
-    let mut bytes = vec![0; constants::COLORMAP_LEN];
-    dcolors::build_colormap(playpal_page_0, &mut bytes, BuildColor(0, 0, 0));
-
-    bytes
-}
-
-fn new_palette(playpal_page_0: &[u8]) -> Vec<u8> {
-    let mut bytes = vec![0; constants::PLAYPAL_LEN];
-    dcolors::build_vanilla_palette(playpal_page_0, &mut bytes);
-
-    bytes
+fn build_color_from_srgb(srgb: palette::Srgb<u8>) -> BuildColor {
+    BuildColor(srgb.red.into(), srgb.green.into(), srgb.blue.into())
 }
 
 pub fn run(input: Input, config: UserConfig) -> Result<(), Box<dyn Error>> {
-    let new_colormap_bytes = new_colormap(assets::VANILLA_PLAYPAL);
-    let new_playpal_bytes = new_palette(assets::VANILLA_PLAYPAL);
+    let mut new_colormap_bytes = vec![0; constants::COLORMAP_LEN];
+    let mut new_playpal_bytes = vec![0; constants::PLAYPAL_LEN];
+
+    dcolors::build_colormap(
+        assets::VANILLA_PLAYPAL,
+        &mut new_colormap_bytes,
+        build_color_from_srgb(config.distance_fade),
+    );
+
+    dcolors::build_palette(
+        assets::VANILLA_PLAYPAL,
+        &mut new_playpal_bytes,
+        build_color_from_srgb(config.hurt),
+        build_color_from_srgb(config.item_pickup),
+        build_color_from_srgb(config.radiation_suit),
+    );
 
     let new_playpal_image = draw::draw_playpal(&new_playpal_bytes);
-
     let new_colormap_image = draw::draw_colormap(assets::VANILLA_PLAYPAL, &new_colormap_bytes, 0);
 
     if !fs::exists(&input.output).unwrap_or_default() {

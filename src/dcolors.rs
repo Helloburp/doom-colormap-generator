@@ -63,9 +63,9 @@ fn build_lights_colormap(playpal: &[u8], colormap: &mut [u8], fade_color: BuildC
     for darkness_level in 0..32 {
         for color in 0..256 {
             let (r, g, b) = (
-                ((playpal[color * 3] as i32) * (32 - darkness_level) + 16) / 32,
-                ((playpal[color * 3 + 1] as i32) * (32 - darkness_level) + 16) / 32,
-                ((playpal[color * 3 + 2] as i32) * (32 - darkness_level) + 16) / 32,
+                lerp_to_darkness(playpal[color * 3], fade_color.0, darkness_level),
+                lerp_to_darkness(playpal[color * 3 + 1], fade_color.1, darkness_level),
+                lerp_to_darkness(playpal[color * 3 + 2], fade_color.2, darkness_level),
             );
 
             colormap[darkness_level as usize * 256 + color as usize] =
