@@ -1,11 +1,3 @@
-# Doom Colormap Generator
-
-Usage: `doom-colormap-generator --input [path_to_input].json --output [path_to_output_dir]`
-
-## Valid Input Format
-
-The following input file will produce the vanilla COLORMAP and PLAYPAL.
-```json
 {
     "distance_fade": {"red":0, "green":0, "blue": 0},
     "distance_fade_blend_mode": "Normal",
@@ -22,7 +14,3 @@ The following input file will produce the vanilla COLORMAP and PLAYPAL.
     "item_pickup": {"red":215, "green":186, "blue": 69},
     "item_pickup_blend_mode": "Normal"
 }
-```
-
-Current valid blend modes are "Normal", "Multiply", and "Screen".
-Support for Photoshop-like Hue/Saturation/Color/Luminosity modes are planned. for the future.

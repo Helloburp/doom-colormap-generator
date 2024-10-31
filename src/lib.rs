@@ -1,5 +1,5 @@
 use clap::Parser;
-use dcolors::BuildColor;
+use palette::Srgb;
 use serde::Deserialize;
 use serde_json;
 use std::error::Error;
@@ -16,42 +16,62 @@ mod constants {
     pub static COLORMAP_LEN: usize = 34 * 256;
 }
 
+pub struct MySrgb<T>(Srgb<T>);
+impl Into<(i32, i32, i32)> for MySrgb<i32> {
+    fn into(self) -> (i32, i32, i32) {
+        (self.0.red as i32, self.0.green as i32, self.0.blue as i32)
+    }
+}
+
+impl From<(i32, i32, i32)> for MySrgb<f32> {
+    fn from(value: (i32, i32, i32)) -> Self {
+        MySrgb(Srgb::new(
+            value.0 as f32 / 255.0,
+            value.1 as f32 / 255.0,
+            value.2 as f32 / 255.0,
+        ))
+    }
+}
+
 #[derive(Parser, Debug)]
 pub struct Input {
     #[arg(short, long)]
-    config: PathBuf,
+    input: PathBuf,
 
     #[arg(short, long)]
     output: PathBuf,
 }
 
 #[derive(Deserialize)]
-pub struct MaskConfig {
-    keep_hue: bool,
-    keep_saturation: bool,
-    keep_value: bool,
+pub enum BlendMode {
+    Normal,
+    Multiply,
+    Screen,
 }
 
 #[derive(Deserialize)]
 pub struct UserConfig {
-    distance_fade: palette::Srgb<u8>,
-    masking: MaskConfig,
-    // invulnerability_range_high: palette::Srgb<u8>,
-    // invulnerability_range_low: palette::Srgb<u8>,
-    hurt: palette::Srgb<u8>,
-    radiation_suit: palette::Srgb<u8>,
-    item_pickup: palette::Srgb<u8>,
+    distance_fade: Srgb<i32>,
+    distance_fade_blend_mode: BlendMode,
+
+    invulnerability_range_low: palette::Srgb<i32>,
+    invulnerability_range_high: palette::Srgb<i32>,
+
+    hurt: Srgb<i32>,
+    hurt_blend_mode: BlendMode,
+
+    radiation_suit: Srgb<i32>,
+    radiation_suit_blend_mode: BlendMode,
+
+    item_pickup: Srgb<i32>,
+    item_pickup_blend_mode: BlendMode,
 }
 
 pub fn config_from_input(input: &Input) -> Result<UserConfig, Box<dyn Error>> {
-    let contents = fs::read_to_string(&input.config)?;
+    let contents = fs::read_to_string(&input.input)?;
     let config: UserConfig = serde_json::from_str(&contents)?;
 
     Ok(config)
-}
-
-fn build_color_from_srgb(srgb: palette::Srgb<u8>) -> BuildColor {
-    BuildColor(srgb.red.into(), srgb.green.into(), srgb.blue.into())
 }
 
 pub fn run(input: Input, config: UserConfig) -> Result<(), Box<dyn Error>> {
@@ -61,15 +81,21 @@ pub fn run(input: Input, config: UserConfig) -> Result<(), Box<dyn Error>> {
     dcolors::build_colormap(
         assets::VANILLA_PLAYPAL,
         &mut new_colormap_bytes,
-        build_color_from_srgb(config.distance_fade),
+        MySrgb(config.distance_fade).into(),
+        MySrgb(config.invulnerability_range_low).into(),
+        MySrgb(config.invulnerability_range_high).into(),
+        config.distance_fade_blend_mode,
     );
 
     dcolors::build_palette(
         assets::VANILLA_PLAYPAL,
         &mut new_playpal_bytes,
-        build_color_from_srgb(config.hurt),
-        build_color_from_srgb(config.item_pickup),
-        build_color_from_srgb(config.radiation_suit),
+        MySrgb(config.hurt).into(),
+        MySrgb(config.item_pickup).into(),
+        MySrgb(config.radiation_suit).into(),
+        config.hurt_blend_mode,
+        config.radiation_suit_blend_mode,
+        config.item_pickup_blend_mode,
     );
 
     let new_playpal_image = draw::draw_playpal(&new_playpal_bytes);

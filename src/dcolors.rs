@@ -1,31 +1,61 @@
 // Source: https://www.doomworld.com/idgames/historic/dmutils
 
-pub struct BuildColor(pub i32, pub i32, pub i32);
+use crate::BlendMode;
 
 fn color_shift_palette(
     inpal: &[u8],
     outpal_at_palette_to_shift: &mut [u8],
-    r: i32,
-    g: i32,
-    b: i32,
+    rgb: (i32, i32, i32),
     shift: i32,
     steps: i32,
+    mode: &BlendMode,
 ) {
     for i in 0..256 {
         let offset = i * 3;
-        let (in_r, in_g, in_b) = (inpal[0 + offset], inpal[1 + offset], inpal[2 + offset]);
-        let (dr, dg, db) = (r - in_r as i32, g - in_g as i32, b - in_b as i32);
+        let rgb_in = (
+            inpal[0 + offset] as i32,
+            inpal[1 + offset] as i32,
+            inpal[2 + offset] as i32,
+        );
 
-        outpal_at_palette_to_shift[offset..offset + 3].copy_from_slice(&[
-            (in_r as i32 + dr * shift / steps) as u8,
-            (in_g as i32 + dg * shift / steps) as u8,
-            (in_b as i32 + db * shift / steps) as u8,
-        ]);
+        let out_color_slice = match *mode {
+            BlendMode::Normal => [
+                (rgb_in.0 + (rgb.0 - rgb_in.0) * shift / steps) as u8,
+                (rgb_in.1 + (rgb.1 - rgb_in.1) * shift / steps) as u8,
+                (rgb_in.2 + (rgb.2 - rgb_in.2) * shift / steps) as u8,
+            ],
+            BlendMode::Multiply => {
+                let target = (
+                    (rgb.0 as f32 / 255.0 * rgb_in.0 as f32 / 255.0) as i32 * 255,
+                    (rgb.1 as f32 / 255.0 * rgb_in.1 as f32 / 255.0) as i32 * 255,
+                    (rgb.2 as f32 / 255.0 * rgb_in.2 as f32 / 255.0) as i32 * 255,
+                );
+                let mix = mix_colors(rgb_in, target, shift as f32 / steps as f32);
+
+                [mix.0 as u8, mix.1 as u8, mix.2 as u8]
+            }
+            BlendMode::Screen => {
+                let target = (
+                    (1.0 - (1.0 - rgb.0 as f32 / 255.0) * (1.0 - rgb_in.0 as f32 / 255.0)) as i32
+                        * 255,
+                    (1.0 - (1.0 - rgb.1 as f32 / 255.0) * (1.0 - rgb_in.1 as f32 / 255.0)) as i32
+                        * 255,
+                    (1.0 - (1.0 - rgb.2 as f32 / 255.0) * (1.0 - rgb_in.2 as f32 / 255.0)) as i32
+                        * 255,
+                );
+                let mix = mix_colors(rgb_in, target, shift as f32 / steps as f32);
+
+                [mix.0 as u8, mix.1 as u8, mix.2 as u8]
+            }
+        };
+
+        outpal_at_palette_to_shift[offset..offset + 3].copy_from_slice(&out_color_slice);
     }
 }
 
-fn best_color(playpal: &[u8], r: u8, g: u8, b: u8) -> u8 {
-    let mut best_distortion = ((r as i32).pow(2) + (g as i32).pow(2) + (b as i32).pow(2)) * 2;
+fn best_color(playpal: &[u8], rgb: (u8, u8, u8)) -> u8 {
+    let mut best_distortion =
+        ((rgb.0 as i32).pow(2) + (rgb.1 as i32).pow(2) + (rgb.2 as i32).pow(2)) * 2;
     let mut best_color = 0;
 
     for i in 0..256 {
@@ -35,7 +65,11 @@ fn best_color(playpal: &[u8], r: u8, g: u8, b: u8) -> u8 {
             playpal[1 + offset] as i32,
             playpal[2 + offset] as i32,
         );
-        let (dr, dg, db) = (r as i32 - in_r, g as i32 - in_g, b as i32 - in_b);
+        let (dr, dg, db) = (
+            rgb.0 as i32 - in_r,
+            rgb.1 as i32 - in_g,
+            rgb.2 as i32 - in_b,
+        );
 
         let distortion = dr.pow(2) + dg.pow(2) + db.pow(2);
 
@@ -50,31 +84,79 @@ fn best_color(playpal: &[u8], r: u8, g: u8, b: u8) -> u8 {
     best_color as u8
 }
 
-fn build_lights_colormap(playpal: &[u8], colormap: &mut [u8], fade_color: BuildColor) {
-    /*
-    Note: The strange order of operations is intentional for integer arithmetic.
-    Likewise, the '+16' exists to round the color to its nearest whole value when
-    the division happens.
-     */
-    fn lerp_to_darkness(pal_color: u8, target_color: i32, darkness_level: i32) -> i32 {
-        target_color + ((pal_color as i32 - target_color) * (32 - darkness_level) + 16) / 32
-    }
-
+fn build_lights_colormap(
+    playpal: &[u8],
+    colormap: &mut [u8],
+    fade_color: (i32, i32, i32),
+    mode: BlendMode,
+) {
     for darkness_level in 0..32 {
         for color in 0..256 {
-            let (r, g, b) = (
-                lerp_to_darkness(playpal[color * 3], fade_color.0, darkness_level),
-                lerp_to_darkness(playpal[color * 3 + 1], fade_color.1, darkness_level),
-                lerp_to_darkness(playpal[color * 3 + 2], fade_color.2, darkness_level),
+            let rgb_in = (
+                playpal[color * 3] as i32,
+                playpal[color * 3 + 1] as i32,
+                playpal[color * 3 + 2] as i32,
             );
+            let rgb_out = match mode {
+                BlendMode::Normal => (
+                    (fade_color.0 + ((rgb_in.0 - fade_color.0) * (32 - darkness_level) + 16) / 32)
+                        as u8,
+                    (fade_color.1 + ((rgb_in.1 - fade_color.1) * (32 - darkness_level) + 16) / 32)
+                        as u8,
+                    (fade_color.2 + ((rgb_in.2 - fade_color.2) * (32 - darkness_level) + 16) / 32)
+                        as u8,
+                ),
+                BlendMode::Multiply => {
+                    let target = (
+                        (fade_color.0 as f32 / 255.0 * rgb_in.0 as f32 / 255.0) as i32 * 255,
+                        (fade_color.1 as f32 / 255.0 * rgb_in.1 as f32 / 255.0) as i32 * 255,
+                        (fade_color.2 as f32 / 255.0 * rgb_in.2 as f32 / 255.0) as i32 * 255,
+                    );
+                    let mix = mix_colors(rgb_in, target, darkness_level as f32 / 32.0);
 
-            colormap[darkness_level as usize * 256 + color as usize] =
-                best_color(playpal, r as u8, g as u8, b as u8);
+                    (mix.0 as u8, mix.1 as u8, mix.2 as u8)
+                }
+                BlendMode::Screen => {
+                    let target = (
+                        (1.0 - (1.0 - fade_color.0 as f32 / 255.0)
+                            * (1.0 - rgb_in.0 as f32 / 255.0)) as i32
+                            * 255,
+                        (1.0 - (1.0 - fade_color.1 as f32 / 255.0)
+                            * (1.0 - rgb_in.1 as f32 / 255.0)) as i32
+                            * 255,
+                        (1.0 - (1.0 - fade_color.2 as f32 / 255.0)
+                            * (1.0 - rgb_in.2 as f32 / 255.0)) as i32
+                            * 255,
+                    );
+                    let mix = mix_colors(rgb_in, target, darkness_level as f32 / 32.0);
+
+                    (mix.0 as u8, mix.1 as u8, mix.2 as u8)
+                }
+            };
+
+            colormap[darkness_level as usize * 256 + color as usize] = best_color(playpal, rgb_out);
         }
     }
 }
 
-fn build_invulnerability_colormap(playpal: &[u8], colormap_at_invuln_start: &mut [u8]) {
+fn mix_colors(color1: (i32, i32, i32), color2: (i32, i32, i32), factor: f32) -> (i32, i32, i32) {
+    use crate::MySrgb;
+    use palette::Mix;
+    let (color1_srgb, color2_srgb): (MySrgb<f32>, MySrgb<f32>) = (color1.into(), color2.into());
+    let mixed_srgb = Mix::mix(color1_srgb.0, color2_srgb.0, factor);
+    (
+        (mixed_srgb.red * 255.0) as i32,
+        (mixed_srgb.green * 255.0) as i32,
+        (mixed_srgb.blue * 255.0) as i32,
+    )
+}
+
+fn build_invulnerability_colormap(
+    playpal: &[u8],
+    colormap_at_invuln_start: &mut [u8],
+    low_color: (i32, i32, i32),
+    high_color: (i32, i32, i32),
+) {
     for color in 0..256 {
         let (r, g, b) = (
             (playpal[color * 3] as f32) / 256.0,
@@ -82,21 +164,33 @@ fn build_invulnerability_colormap(playpal: &[u8], colormap_at_invuln_start: &mut
             (playpal[color * 3 + 2] as f32) / 256.0,
         );
 
-        let gray = (255.0 * (1.0 - (r * 0.299 + g * 0.587 + b * 0.144))) as u8;
-        colormap_at_invuln_start[color] = best_color(playpal, gray, gray, gray)
+        let brightness = 1.0 - (r * 0.299 + g * 0.587 + b * 0.144);
+        let mixed_color = mix_colors(low_color, high_color, brightness);
+        colormap_at_invuln_start[color] = best_color(
+            playpal,
+            (
+                mixed_color.0 as u8,
+                mixed_color.1 as u8,
+                mixed_color.2 as u8,
+            ),
+        )
     }
 }
 
-fn build_hurt_palette(playpal: &[u8], playpal_at_hurt_start: &mut [u8], r: i32, g: i32, b: i32) {
+fn build_hurt_palette(
+    playpal: &[u8],
+    playpal_at_hurt_start: &mut [u8],
+    rgb: (i32, i32, i32),
+    mode: BlendMode,
+) {
     for i in 1..9 {
         color_shift_palette(
             playpal,
             &mut playpal_at_hurt_start[(i - 1) * 256 * 3..],
-            r,
-            g,
-            b,
+            rgb,
             i as i32,
             9,
+            &mode,
         );
     }
 }
@@ -104,19 +198,17 @@ fn build_hurt_palette(playpal: &[u8], playpal_at_hurt_start: &mut [u8], r: i32, 
 fn build_pickup_palette(
     playpal: &[u8],
     playpal_at_pickup_start: &mut [u8],
-    r: i32,
-    g: i32,
-    b: i32,
+    rgb: (i32, i32, i32),
+    mode: BlendMode,
 ) {
     for i in 1..5 {
         color_shift_palette(
             playpal,
             &mut playpal_at_pickup_start[(i - 1) * 256 * 3..],
-            r,
-            g,
-            b,
+            rgb,
             i as i32,
             8,
+            &mode,
         );
     }
 }
@@ -124,41 +216,40 @@ fn build_pickup_palette(
 fn build_radiation_palette(
     playpal: &[u8],
     playpal_at_radiation_start: &mut [u8],
-    r: i32,
-    g: i32,
-    b: i32,
+    rgb: (i32, i32, i32),
+    mode: BlendMode,
 ) {
-    color_shift_palette(playpal, playpal_at_radiation_start, r, g, b, 1, 8);
+    color_shift_palette(playpal, playpal_at_radiation_start, rgb, 1, 8, &mode);
 }
 
 pub fn build_palette(
     playpal_page_0: &[u8],
     outpal: &mut [u8],
-    hurt_color: BuildColor,
-    pickup_color: BuildColor,
-    radiation_color: BuildColor,
+    hurt_color: (i32, i32, i32),
+    pickup_color: (i32, i32, i32),
+    radiation_color: (i32, i32, i32),
+    hurt_mode: BlendMode,
+    pickup_mode: BlendMode,
+    radiation_mode: BlendMode,
 ) {
     outpal[0..256 * 3].copy_from_slice(&playpal_page_0[0..256 * 3]);
     build_hurt_palette(
         playpal_page_0,
         &mut outpal[256 * 1 * 3..],
-        hurt_color.0,
-        hurt_color.1,
-        hurt_color.2,
+        hurt_color,
+        hurt_mode,
     );
     build_pickup_palette(
         playpal_page_0,
         &mut outpal[256 * 9 * 3..],
-        pickup_color.0,
-        pickup_color.1,
-        pickup_color.2,
+        pickup_color,
+        pickup_mode,
     );
     build_radiation_palette(
         playpal_page_0,
         &mut outpal[256 * 13 * 3..],
-        radiation_color.0,
-        radiation_color.1,
-        radiation_color.2,
+        radiation_color,
+        radiation_mode,
     );
 }
 
@@ -166,19 +257,34 @@ pub fn build_vanilla_palette(playpal_page_0: &[u8], outpal: &mut [u8]) {
     build_palette(
         playpal_page_0,
         outpal,
-        BuildColor(255, 0, 0),
-        BuildColor(215, 186, 69),
-        BuildColor(0, 256, 0),
+        (255, 0, 0),
+        (215, 186, 69),
+        (0, 256, 0),
+        BlendMode::Normal,
+        BlendMode::Normal,
+        BlendMode::Normal,
     );
 }
 
-pub fn build_colormap(playpal_page_0: &[u8], outmap: &mut [u8], fade_color: BuildColor) {
+pub fn build_colormap(
+    playpal_page_0: &[u8],
+    outmap: &mut [u8],
+    fade_color: (i32, i32, i32),
+    invuln_low_color: (i32, i32, i32),
+    invuln_high_color: (i32, i32, i32),
+    fade_mode: BlendMode,
+) {
     for i in 0u8..=255u8 {
         outmap[i as usize] = i;
     }
 
-    build_lights_colormap(playpal_page_0, outmap, fade_color);
-    build_invulnerability_colormap(playpal_page_0, &mut outmap[256 * 32..]);
+    build_lights_colormap(playpal_page_0, outmap, fade_color, fade_mode);
+    build_invulnerability_colormap(
+        playpal_page_0,
+        &mut outmap[256 * 32..],
+        invuln_low_color,
+        invuln_high_color,
+    );
 
     for i in 256 * 33..256 * 34 {
         outmap[i] = 0
@@ -186,7 +292,14 @@ pub fn build_colormap(playpal_page_0: &[u8], outmap: &mut [u8], fade_color: Buil
 }
 
 pub fn build_vanilla_colormap(playpal_page_0: &[u8], outmap: &mut [u8]) {
-    build_colormap(playpal_page_0, outmap, BuildColor(0, 0, 0));
+    build_colormap(
+        playpal_page_0,
+        outmap,
+        (0, 0, 0),
+        (0, 0, 0),
+        (255, 255, 255),
+        BlendMode::Normal,
+    );
 }
 
 #[cfg(test)]
@@ -206,5 +319,34 @@ mod tests {
         let mut outmap = vec![0; constants::COLORMAP_LEN];
         build_vanilla_colormap(assets::VANILLA_PLAYPAL, &mut outmap);
         assert_eq!(outmap, assets::VANILLA_COLORMAP);
+    }
+
+    #[test]
+    fn grayscale_mix() {
+        assert_eq!(mix_colors((0, 0, 0), (255, 255, 255), 0.0), (0, 0, 0));
+        assert_eq!(mix_colors((0, 0, 0), (255, 255, 255), 1.0), (255, 255, 255));
+        assert_eq!(mix_colors((0, 0, 0), (255, 255, 255), 0.5), (127, 127, 127));
+        assert_eq!(mix_colors((0, 0, 0), (255, 255, 255), 0.25), (63, 63, 63));
+    }
+    #[test]
+    fn grayscale_mix_equates_to_direct_best_color_lookup() {
+        for i in 0..255 {
+            let gray = i as u8;
+            let gray_f32 = gray as f32 / 255.0;
+
+            let direct_lookup = best_color(assets::VANILLA_PLAYPAL, (gray, gray, gray));
+
+            let mixed_color = mix_colors((0, 0, 0), (255, 255, 255), gray_f32);
+            let mixed_lookup = best_color(
+                assets::VANILLA_PLAYPAL,
+                (
+                    mixed_color.0 as u8,
+                    mixed_color.1 as u8,
+                    mixed_color.2 as u8,
+                ),
+            );
+
+            assert_eq!(direct_lookup, mixed_lookup);
+        }
     }
 }
