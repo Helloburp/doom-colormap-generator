@@ -1,0 +1,16 @@
+{
+    "distance_fade": {"red":255, "green":0, "blue": 50},
+    "distance_fade_blend_mode": "Hue",
+
+    "invulnerability_range_low": {"red":255, "green":0, "blue":0},
+    "invulnerability_range_high": {"red":0, "green":255, "blue":255},
+
+    "hurt": {"red":255, "green":0, "blue": 0},
+    "hurt_blend_mode": "Color",
+
+    "radiation_suit": {"red":0, "green":2000, "blue": 0},
+    "radiation_suit_blend_mode": "Saturation",
+
+    "item_pickup": {"red":50, "green":90, "blue": 6969},
+    "item_pickup_blend_mode": "Luminosity"
+}
