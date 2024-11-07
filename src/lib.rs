@@ -39,7 +39,10 @@ pub struct Input {
     input: PathBuf,
 
     #[arg(short, long)]
-    output: PathBuf,
+    output: Option<PathBuf>,
+
+    #[arg(short, long)]
+    playpal: Option<PathBuf>,
 }
 
 #[derive(Deserialize)]
@@ -82,17 +85,19 @@ pub fn run(input: Input, config: UserConfig) -> Result<(), Box<dyn Error>> {
     let mut new_colormap_bytes = vec![0; constants::COLORMAP_LEN];
     let mut new_playpal_bytes = vec![0; constants::PLAYPAL_LEN];
 
-    dcolors::build_colormap(
-        assets::VANILLA_PLAYPAL,
-        &mut new_colormap_bytes,
-        MySrgb(config.distance_fade).into(),
-        MySrgb(config.invulnerability_range_low).into(),
-        MySrgb(config.invulnerability_range_high).into(),
-        config.distance_fade_blend_mode,
-    );
+    let playpal: &[u8] = match input.playpal {
+        Some(path) => {
+            let bytes = fs::read(path)?;
+            if bytes.len() < 256 * 3 {
+                return Err(String::from("Provided playpal must be >= 768 bytes in size.").into());
+            }
+            &bytes.clone()
+        }
+        None => assets::VANILLA_PLAYPAL,
+    };
 
     dcolors::build_palette(
-        assets::VANILLA_PLAYPAL,
+        playpal,
         &mut new_playpal_bytes,
         MySrgb(config.hurt).into(),
         MySrgb(config.item_pickup).into(),
@@ -102,16 +107,31 @@ pub fn run(input: Input, config: UserConfig) -> Result<(), Box<dyn Error>> {
         config.item_pickup_blend_mode,
     );
 
-    let new_playpal_image = draw::draw_playpal(&new_playpal_bytes);
-    let new_colormap_image = draw::draw_colormap(assets::VANILLA_PLAYPAL, &new_colormap_bytes, 0);
+    dcolors::build_colormap(
+        &new_playpal_bytes,
+        &mut new_colormap_bytes,
+        MySrgb(config.distance_fade).into(),
+        MySrgb(config.invulnerability_range_low).into(),
+        MySrgb(config.invulnerability_range_high).into(),
+        config.distance_fade_blend_mode,
+    );
 
-    if !fs::exists(&input.output).unwrap_or_default() {
-        fs::create_dir(&input.output)?;
+    let new_playpal_image = draw::draw_playpal(&new_playpal_bytes);
+    let new_colormap_image = draw::draw_colormap(playpal, &new_colormap_bytes, 0);
+
+    let output_path = &input.output.unwrap_or({
+        let mut default_pathbuf = PathBuf::new();
+        default_pathbuf.push("output");
+        default_pathbuf
+    });
+
+    if !fs::exists(output_path).unwrap_or_default() {
+        fs::create_dir(output_path)?;
     }
 
     fs::write(
         {
-            let mut path = input.output.clone();
+            let mut path = output_path.clone();
             path.push("PLAYPAL");
             path.set_extension("pal");
             path
@@ -121,7 +141,7 @@ pub fn run(input: Input, config: UserConfig) -> Result<(), Box<dyn Error>> {
 
     fs::write(
         {
-            let mut path = input.output.clone();
+            let mut path = output_path.clone();
             path.push("COLORMAP");
             path.set_extension("cmp");
             path
@@ -130,14 +150,14 @@ pub fn run(input: Input, config: UserConfig) -> Result<(), Box<dyn Error>> {
     )?;
 
     new_playpal_image.save({
-        let mut path = input.output.clone();
+        let mut path = output_path.clone();
         path.push("PLAYPAL_preview");
         path.set_extension("png");
         path
     })?;
 
     new_colormap_image.save({
-        let mut path = input.output.clone();
+        let mut path = output_path.clone();
         path.push("COLORMAP_preview");
         path.set_extension("png");
         path
