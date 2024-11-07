@@ -9,6 +9,7 @@ If Playpal is not specified, the default DOOM playpal will be used.
 ## Examples
 
 Example 1: Input only. `doom-colormap-generator example-input/vanilla.json`
+
 Example 2: With playpal override. `doom-colormap-generator example-input/vanilla.json --playpal my_custom_playpal.cmp`
 
 ## Valid Input Format
