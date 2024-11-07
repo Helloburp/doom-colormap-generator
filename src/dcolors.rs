@@ -10,6 +10,10 @@ fn color_shift_palette(
     steps: i32,
     mode: &BlendMode,
 ) {
+    let get_mix_result = |rgb_in: (i32, i32, i32), target: (i32, i32, i32)| -> [u8; 3] {
+        let mix = mix_colors(rgb_in, target, shift as f32 / steps as f32);
+        [mix.0 as u8, mix.1 as u8, mix.2 as u8]
+    };
     for i in 0..256 {
         let offset = i * 3;
         let rgb_in = (
@@ -30,9 +34,7 @@ fn color_shift_palette(
                     (rgb.1 as f32 / 255.0 * rgb_in.1 as f32 / 255.0) as i32 * 255,
                     (rgb.2 as f32 / 255.0 * rgb_in.2 as f32 / 255.0) as i32 * 255,
                 );
-                let mix = mix_colors(rgb_in, target, shift as f32 / steps as f32);
-
-                [mix.0 as u8, mix.1 as u8, mix.2 as u8]
+                get_mix_result(rgb_in, target)
             }
             BlendMode::Screen => {
                 let target = (
@@ -46,6 +48,18 @@ fn color_shift_palette(
                 let mix = mix_colors(rgb_in, target, shift as f32 / steps as f32);
 
                 [mix.0 as u8, mix.1 as u8, mix.2 as u8]
+            }
+            BlendMode::Hue => {
+                get_mix_result(rgb_in, combine_hsv(rgb_in, rgb, (true, false, false)))
+            }
+            BlendMode::Saturation => {
+                get_mix_result(rgb_in, combine_hsv(rgb_in, rgb, (false, true, false)))
+            }
+            BlendMode::Color => {
+                get_mix_result(rgb_in, combine_hsv(rgb_in, rgb, (true, true, false)))
+            }
+            BlendMode::Luminosity => {
+                get_mix_result(rgb_in, combine_hsv(rgb_in, rgb, (false, false, true)))
             }
         };
 
@@ -90,6 +104,11 @@ fn build_lights_colormap(
     fade_color: (i32, i32, i32),
     mode: BlendMode,
 ) {
+    let get_mix_result = |rgb_in: (i32, i32, i32), target: (i32, i32, i32), darkness_level: i32| {
+        let mix = mix_colors(rgb_in, target, darkness_level as f32 / 32.0);
+
+        (mix.0 as u8, mix.1 as u8, mix.2 as u8)
+    };
     for darkness_level in 0..32 {
         for color in 0..256 {
             let rgb_in = (
@@ -112,9 +131,7 @@ fn build_lights_colormap(
                         (fade_color.1 as f32 / 255.0 * rgb_in.1 as f32 / 255.0) as i32 * 255,
                         (fade_color.2 as f32 / 255.0 * rgb_in.2 as f32 / 255.0) as i32 * 255,
                     );
-                    let mix = mix_colors(rgb_in, target, darkness_level as f32 / 32.0);
-
-                    (mix.0 as u8, mix.1 as u8, mix.2 as u8)
+                    get_mix_result(rgb_in, target, darkness_level)
                 }
                 BlendMode::Screen => {
                     let target = (
@@ -128,15 +145,70 @@ fn build_lights_colormap(
                             * (1.0 - rgb_in.2 as f32 / 255.0)) as i32
                             * 255,
                     );
-                    let mix = mix_colors(rgb_in, target, darkness_level as f32 / 32.0);
-
-                    (mix.0 as u8, mix.1 as u8, mix.2 as u8)
+                    get_mix_result(rgb_in, target, darkness_level)
                 }
+                BlendMode::Hue => get_mix_result(
+                    rgb_in,
+                    combine_hsv(rgb_in, fade_color, (true, false, false)),
+                    darkness_level,
+                ),
+                BlendMode::Saturation => get_mix_result(
+                    rgb_in,
+                    combine_hsv(rgb_in, fade_color, (false, true, false)),
+                    darkness_level,
+                ),
+                BlendMode::Color => get_mix_result(
+                    rgb_in,
+                    combine_hsv(rgb_in, fade_color, (true, true, false)),
+                    darkness_level,
+                ),
+                BlendMode::Luminosity => get_mix_result(
+                    rgb_in,
+                    combine_hsv(rgb_in, fade_color, (false, false, true)),
+                    darkness_level,
+                ),
             };
 
             colormap[darkness_level as usize * 256 + color as usize] = best_color(playpal, rgb_out);
         }
     }
+}
+
+fn combine_hsv(
+    top_color: (i32, i32, i32),
+    bottom_color: (i32, i32, i32),
+    hsv_from_top: (bool, bool, bool),
+) -> (i32, i32, i32) {
+    use crate::MySrgb;
+    use palette::{Hsv, IntoColor, Srgb};
+    let (color1_srgb, color2_srgb): (MySrgb<f32>, MySrgb<f32>) =
+        (top_color.into(), bottom_color.into());
+    let (color1_hsv, color2_hsv): (Hsv, Hsv) =
+        ((color1_srgb.0).into_color(), color2_srgb.0.into_color());
+
+    let resulting_hsv = Hsv::new(
+        if hsv_from_top.0 {
+            color1_hsv.hue
+        } else {
+            color2_hsv.hue
+        },
+        if hsv_from_top.1 {
+            color1_hsv.saturation
+        } else {
+            color2_hsv.saturation
+        },
+        if hsv_from_top.2 {
+            color1_hsv.value
+        } else {
+            color2_hsv.value
+        },
+    );
+    let resulting_srgb: Srgb<f32> = resulting_hsv.into_color();
+    (
+        (resulting_srgb.red * 255.0) as i32,
+        (resulting_srgb.green * 255.0) as i32,
+        (resulting_srgb.blue * 255.0) as i32,
+    )
 }
 
 fn mix_colors(color1: (i32, i32, i32), color2: (i32, i32, i32), factor: f32) -> (i32, i32, i32) {

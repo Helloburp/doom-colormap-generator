@@ -47,6 +47,10 @@ pub enum BlendMode {
     Normal,
     Multiply,
     Screen,
+    Hue,
+    Saturation,
+    Color,
+    Luminosity,
 }
 
 #[derive(Deserialize)]
