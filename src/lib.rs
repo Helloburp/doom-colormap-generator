@@ -35,7 +35,7 @@ impl From<(i32, i32, i32)> for MySrgb<f32> {
 
 #[derive(Parser, Debug)]
 pub struct Input {
-    #[arg(short, long)]
+    #[arg(index(1))]
     input: PathBuf,
 
     #[arg(short, long)]

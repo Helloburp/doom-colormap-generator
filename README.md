@@ -1,6 +1,6 @@
 # Doom Colormap Generator
 
-Usage: `doom-colormap-generator --input [path_to_input].json --output [path_to_output_dir] --playpal [path_to_playpal_directory]`
+Usage: `doom-colormap-generator <INPUT> --output <OUTPUT> --playpal <OUTPUT>`
 
 If Output is not specified, an output directory will be created in the current directory named "output".
 
@@ -8,8 +8,8 @@ If Playpal is not specified, the default DOOM playpal will be used.
 
 ## Examples
 
-Example 1: Input only. `doom-colormap-generator --input example-input/vanilla.json`
-Example 2: With playpal override. `doom-colormap-generator --input example-input/vanilla.json --playpal my_custom_playpal.cmp`
+Example 1: Input only. `doom-colormap-generator example-input/vanilla.json`
+Example 2: With playpal override. `doom-colormap-generator example-input/vanilla.json --playpal my_custom_playpal.cmp`
 
 ## Valid Input Format
 
